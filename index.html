@@ -149,7 +149,7 @@
         </button>
         <div class="flex align-center gap-0-3">
           <sm-select id="currency_selector" class="margin-right-0-5">
-            <sm-option value="bsc" selected >BSC</sm-option>
+            <sm-option value="bsc" selected>BSC</sm-option>
             <sm-option value="inr">INR</sm-option>
             <sm-option value="usd">USD</sm-option>
           </sm-select>
@@ -2605,15 +2605,30 @@
                   >
                     <li class="flex align-center space-between">
                       <p>Binance</p>
-                      <b id="Binance_balance">${BinanceBalance} BSC</b>
+                      <b
+                        id="Binance_balance"
+                        class="bsc-value"
+                        data-bsc="${BinanceBalance}"
+                        >${formatCurrency(BinanceBalance)}</b
+                      >
                     </li>
                     <li class="flex align-center space-between">
                       <p>USDC</p>
-                      <b id="usdc_balance">${usdcBalance} USDC</b>
+                      <b
+                        id="usdc_balance"
+                        class="bsc-value"
+                        data-bsc="${usdcBalance}"
+                        >${formatCurrency(usdcBalance)}</b
+                      >
                     </li>
                     <li class="flex align-center space-between">
                       <p>USDT</p>
-                      <b id="usdt_balance">${usdtBalance} USDT</b>
+                      <b
+                        id="usdt_balance"
+                        class="bsc-value"
+                        data-bsc="${usdtBalance}"
+                        >${formatCurrency(usdtBalance)}</b
+                      >
                     </li>
                   </ul>
                 </div>

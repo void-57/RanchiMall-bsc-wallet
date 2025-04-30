@@ -523,7 +523,9 @@
         for (const el of elements) {
           const bscAmount = parseFloat(el.dataset.bsc || "0");
           const timestamp = el.dataset.timestamp;
-
+          if (el.id === "usdc_balance" || el.id === "usdt_balance") {
+            continue;
+          }
           let formattedValue;
           if (currency === "bsc") {
             formattedValue = formatCurrency(bscAmount);
@@ -1694,7 +1696,7 @@
               class="grid gap-1-5"
               style="width: min(32rem, 100%);"
             >
-              <h2>Check BNB, USDC and USDT balance</h2>
+              <h2>Check BSC, USDC and USDT balance</h2>
               <sm-form oninvalid="handleInvalidSearch()">
                 <div id="input_wrapper">
                   <sm-input
@@ -2542,7 +2544,7 @@
                         id="usdc_balance"
                         class="bsc-value"
                         data-bsc="${usdcBalance}"
-                        >${formatCurrency(usdcBalance)}</b
+                        >${usdcBalance} USDC</b
                       >
                     </li>
                     <li class="flex align-center space-between">
@@ -2551,7 +2553,7 @@
                         id="usdt_balance"
                         class="bsc-value"
                         data-bsc="${usdtBalance}"
-                        >${formatCurrency(usdtBalance)}</b
+                        >${usdtBalance} USDT</b
                       >
                     </li>
                   </ul>

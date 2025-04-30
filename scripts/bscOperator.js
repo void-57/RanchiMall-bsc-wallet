@@ -350,7 +350,7 @@
         console.error("[DEBUG] Invalid address:", address);
         return new Error("Invalid address");
       }
-  
+
       const provider = getProvider();
       console.log("[DEBUG] Provider obtained, fetching balance...");
       const balanceWei = await provider.getBalance(address);
@@ -363,55 +363,46 @@
       return error;
     }
   });
-
   const getTokenBalance = (bscOperator.getTokenBalance = async (
     address,
     token,
     { contractAddress } = {}
   ) => {
-    console.log("[DEBUG] Getting token balance for:", {
-      address,
-      token,
-      contractAddress,
-    });
     try {
       if (!address) {
-        console.error("[DEBUG] Address not specified");
         throw new Error("Address not specified");
       }
       if (!token) {
-        console.error("[DEBUG] Token not specified");
         throw new Error("Token not specified");
       }
       if (!CONTRACT_ADDRESSES[token] && !contractAddress) {
-        console.error(
-          "[DEBUG] Contract address not available for token:",
-          token
-        );
         throw new Error("Contract address of token not available");
       }
 
-      const provider = getProvider();
-      console.log("[DEBUG] Provider obtained, creating contract instance...");
+      const provider = getProvider(); // Ensure this returns a valid provider for BSC
       const contract = new ethers.Contract(
         CONTRACT_ADDRESSES[token] || contractAddress,
         BEP20ABI,
         provider
       );
 
-      console.log("[DEBUG] Fetching token balance...");
       let balance = await contract.balanceOf(address);
-      console.log("[DEBUG] Raw token balance:", balance.toString());
 
+      // Assuming 18 decimals for most tokens like USDT and USDC*****************************************************
+      //  const decimals = 0.00;
       const decimals = 18;
-      console.log("[DEBUG] Using decimals:", decimals);
+      const formattedDecimals = decimals.toFixed(1); // This will convert 18 to "18.00"
+      console.log(formattedDecimals); // Outputs: "18.0"
+
       balance = parseFloat(ethers.utils.formatUnits(balance, decimals));
-      console.log("[DEBUG] Formatted token balance:", balance);
+
+      // Format the balance to 2 decimal places for display
+      balance = balance.toFixed(2);
 
       return balance;
     } catch (e) {
-      console.error("[DEBUG] Error in getTokenBalance:", e);
-      throw e;
+      //  console.error("Error getting token balance:", e.message);
+      //  throw new Error("Failed to get token balance");
     }
   });
 

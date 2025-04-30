@@ -465,6 +465,29 @@
         ) {
           await fetchExchangeRates();
         }
+        if (getRef("page_container")?.dataset?.page === "tdx") {
+          // Get the transaction value and fee elements if they exist
+          const valueElement = getRef("tx_value");
+          const feeElement = getRef("tx_fee");
+
+          if (valueElement && valueElement.dataset.eth) {
+            const ethAmount = parseFloat(valueElement.dataset.eth);
+            const timestamp = valueElement.dataset.timestamp;
+            valueElement.textContent = await getConvertedAmount(
+              ethAmount,
+              timestamp
+            );
+          }
+
+          if (feeElement && feeElement.dataset.eth) {
+            const ethFee = parseFloat(feeElement.dataset.eth);
+            const timestamp = feeElement.dataset.timestamp;
+            feeElement.textContent = await getConvertedAmount(
+              ethFee,
+              timestamp
+            );
+          }
+        }
 
         if (currency !== "bsc" && previousCurrency === "bsc") {
           testHistoricalAPIAndRenderToggle();
@@ -1212,24 +1235,23 @@
                 const data = response;
 
                 if (data && data.length > 0) {
-                  const transactions = data
-                    .map((tx) => {
-                      const isOutgoing =
-                        tx.from.toUpperCase() === address.toUpperCase();
-                      const txObj = {
-                        txid: tx.hash,
-                        time: getFormattedTime(tx.timeStamp),
-                        originalTimestamp: tx.timeStamp,
-                        block: tx.blockNumber || -1,
-                        confirmations: tx.confirmations || 0,
-                        type: isOutgoing ? "out" : "in",
-                        amount: tx.value / 1000000000000000000,
-                        sender: tx.from,
-                        receiver: tx.to,
-                        address: address,
-                      };
-                      return txObj;
-                    })
+                  const transactions = data.map((tx) => {
+                    const isOutgoing =
+                      tx.from.toUpperCase() === address.toUpperCase();
+                    const txObj = {
+                      txid: tx.hash,
+                      time: getFormattedTime(tx.timeStamp),
+                      originalTimestamp: tx.timeStamp,
+                      block: tx.blockNumber || -1,
+                      confirmations: tx.confirmations || 0,
+                      type: isOutgoing ? "out" : "in",
+                      amount: tx.value / 1000000000000000000,
+                      sender: tx.from,
+                      receiver: tx.to,
+                      address: address,
+                    };
+                    return txObj;
+                  });
                   // Filter
                   const filter = getRef("filter_selector").value || "all";
                   let filteredTransactions = transactions;
@@ -2153,7 +2175,7 @@
                         <label class="metric-label">Value</label>
                         <div
                           id="tx_value"
-                          class="metric-value eth-value"
+                          class="metric-value bsc-value"
                           data-eth="${value}"
                           data-timestamp="${tx.timeStamp || ""}"
                         ></div>
@@ -2168,7 +2190,7 @@
                         <label class="metric-label">Transaction Fee</label>
                         <div
                           id="tx_fee"
-                          class="metric-value eth-value"
+                          class="metric-value bsc-value"
                           data-eth="${fee}"
                           data-timestamp="${tx.timeStamp || ""}"
                         ></div>
@@ -2244,18 +2266,18 @@
             if (getRef("tx_hash")) getRef("tx_hash").value = tx.hash;
 
             if (getRef("tx_value")) {
-              getRef("tx_value").dataset.eth = value;
+              getRef("tx_value").dataset.bsc = value;
               getRef("tx_value").dataset.timestamp = tx.timeStamp || "";
-              getRef("tx_value").classList.add("eth-value");
+              getRef("tx_value").classList.add("bsc-value");
               getRef("tx_value").textContent = formatCurrency(value);
             }
 
             if (getRef("tx_gasPrice"))
               getRef("tx_gasPrice").textContent = `${gasPrice} Gwei`;
             if (getRef("tx_fee")) {
-              getRef("tx_fee").dataset.eth = fee;
+              getRef("tx_fee").dataset.bsc = fee;
               getRef("tx_fee").dataset.timestamp = tx.timeStamp || "";
-              getRef("tx_fee").classList.add("eth-value");
+              getRef("tx_fee").classList.add("bsc-value");
               getRef("tx_fee").textContent = formatCurrency(fee);
             }
             if (getRef("tx_timestamp"))
@@ -2427,7 +2449,7 @@
           let keyToConvert = document
             .querySelector("#check_balance_input")
             .value.trim();
-          
+
           if (/^0x[0-9a-fA-F]{64}$/.test(keyToConvert)) {
             window.location.hash = `#/tdx/${keyToConvert}`;
             return;

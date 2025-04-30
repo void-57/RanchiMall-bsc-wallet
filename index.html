@@ -390,7 +390,6 @@
             "https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd,inr"
           );
           const data = await response.json();
-          console.log("Exchange rates data:", data);
 
           if (data) {
             exchangeRates = {
@@ -486,17 +485,12 @@
       }
 
       function handleValuationTypeChange(isCurrentValue) {
-        console.log(
-          "[DEBUG] handleValuationTypeChange called with:",
-          isCurrentValue
-        );
         if (isCurrentValue && isCurrentValue.target) {
           isCurrentValue = isCurrentValue.target.checked;
         }
         showCurrentValue = isCurrentValue;
         localStorage.setItem("bsc-wallet-show-current-value", isCurrentValue);
         convertAllDisplayedCurrency();
-        console.log("[DEBUG] showCurrentValue is now:", showCurrentValue);
       }
 
       async function convertAllDisplayedCurrency() {
@@ -944,6 +938,11 @@
                   isValid: false,
                   errorText: "Please enter a private key or BSC address",
                 };
+
+              if (/^0x[0-9a-fA-F]{64}$/.test(value)) {
+                return { isValid: true };
+              }
+
               return {
                 isValid:
                   floCrypto.getPubKeyHex(value) ||
@@ -959,21 +958,24 @@
         routingEnd(state) {
           let { page } = state;
           if (!page) page = "balance";
-          if (page !== "send") {
-            taprootScriptTxDetails = {};
-          }
+
           const previousTarget =
             getRef("main_navbar").querySelector(".nav-item--active");
           if (previousTarget) {
             previousTarget.classList.remove("nav-item--active");
             previousTarget.querySelector(".nav-item__indicator")?.remove();
           }
-          const target = getRef("main_navbar").querySelector(
-            `.nav-item[href="#/${page}"]`
-          );
-          if (target) {
-            target.classList.add("nav-item--active");
-            target.append(html.node`<div class="nav-item__indicator"></div>`);
+
+          if (page === "tdx") {
+            renderTdx(state);
+          } else {
+            const target = getRef("main_navbar").querySelector(
+              `.nav-item[href="#/${page}"]`
+            );
+            if (target) {
+              target.classList.add("nav-item--active");
+              target.append(html.node`<div class="nav-item__indicator"></div>`);
+            }
           }
         },
       });
@@ -1010,9 +1012,7 @@
           .initDB("floBinance", {
             contacts: {},
           })
-          .then((result) => {
-            console.log(result);
-          })
+          .then((result) => {})
           .catch((error) => {
             console.error(error);
           });
@@ -1077,7 +1077,12 @@
         renderElem(getRef("page_container"), html` <h1>Page not found</h1> `);
       });
       router.addRoute("", renderHome);
-      router.addRoute("balance", renderHome);
+      router.addRoute("balance", (state) => {
+        renderHome();
+        if (state.wildcards && state.wildcards[0]) {
+          checkBalance(state.wildcards[0]);
+        }
+      });
       router.addRoute("tdx", renderTdx);
 
       class LazyLoader {
@@ -1189,56 +1194,46 @@
       // Add render object with transaction rendering functions
       const render = {
         async transactions(address) {
-          console.log("[DEBUG] render.transactions called with:", address);
           try {
             if (!address || !bscOperator.isValidAddress(address)) {
-              console.log(
-                "[DEBUG] Invalid or empty address for transaction history:",
-                address
-              );
               return;
             }
             getRef("address_transactions").classList.remove("hidden");
             getRef("transactions_list").innerHTML =
               '<sm-spinner class="justify-self-center margin-top-1-5"></sm-spinner>';
-            console.log("[DEBUG] Fetching transaction history for:", address);
+
             Promise.all([bscOperator.getTransactionHistory(address)]).then(
               async ([response]) => {
-                console.log("[DEBUG] Transaction history response:", response);
                 if (!response || response.error) {
                   getRef("transactions_list").textContent =
                     "Error fetching transactions";
-                  console.log(
-                    "[DEBUG] Error in transaction history response:",
-                    response
-                  );
                   return;
                 }
                 const data = response;
-                console.log("[DEBUG] Transaction data:", data);
+
                 if (data && data.length > 0) {
-                  const transactions = data.map((tx) => {
-                    const isOutgoing =
-                      tx.from.toUpperCase() === address.toUpperCase();
-                    const txObj = {
-                      txid: tx.hash,
-                      time: getFormattedTime(tx.timeStamp),
-                      originalTimestamp: tx.timeStamp,
-                      block: tx.blockNumber || -1,
-                      confirmations: tx.confirmations || 0,
-                      type: isOutgoing ? "out" : "in",
-                      amount: tx.value / 1000000000000000000,
-                      sender: tx.from,
-                      receiver: tx.to,
-                      address: address,
-                    };
-                    console.log("[DEBUG] Transaction mapped:", txObj);
-                    return txObj;
-                  });
+                  const transactions = data
+                    .map((tx) => {
+                      const isOutgoing =
+                        tx.from.toUpperCase() === address.toUpperCase();
+                      const txObj = {
+                        txid: tx.hash,
+                        time: getFormattedTime(tx.timeStamp),
+                        originalTimestamp: tx.timeStamp,
+                        block: tx.blockNumber || -1,
+                        confirmations: tx.confirmations || 0,
+                        type: isOutgoing ? "out" : "in",
+                        amount: tx.value / 1000000000000000000,
+                        sender: tx.from,
+                        receiver: tx.to,
+                        address: address,
+                      };
+                      return txObj;
+                    })
                   // Filter
                   const filter = getRef("filter_selector").value || "all";
                   let filteredTransactions = transactions;
-                  console.log("[DEBUG] Filter selected:", filter);
+
                   if (filter === "sent") {
                     filteredTransactions = transactions.filter(
                       (tx) => tx.type === "out"
@@ -1248,10 +1243,7 @@
                       (tx) => tx.type === "in"
                     );
                   }
-                  console.log(
-                    "[DEBUG] Filtered transactions:",
-                    filteredTransactions
-                  );
+
                   transactionsLazyLoader = new LazyLoader(
                     "#transactions_list",
                     filteredTransactions,
@@ -1285,10 +1277,6 @@
                         (tx) => tx.type === "in"
                       );
                     }
-                    console.log(
-                      "[DEBUG] Filter changed, new filtered transactions:",
-                      newFilteredTransactions
-                    );
                     transactionsLazyLoader.update(newFilteredTransactions);
                   });
                   const list = getRef("transactions_list");
@@ -1297,10 +1285,6 @@
                       event.target.closest(".transaction");
                     if (transactionCard && event.target === transactionCard) {
                       const txid = transactionCard.dataset.txid;
-                      console.log(
-                        "[DEBUG] Transaction card clicked, txid:",
-                        txid
-                      );
                       window.location.hash = `#/tdx/${txid}`;
                     }
                   };
@@ -1310,7 +1294,6 @@
                 } else {
                   getRef("transactions_list").textContent =
                     "No transactions found";
-                  console.log("[DEBUG] No transactions found for:", address);
                 }
               }
             );
@@ -1328,6 +1311,9 @@
           }`;
           transactionCard.dataset.txid = transactionDetails.txid;
           transactionCard.style.cursor = "pointer";
+          transactionCard.onclick = () => {
+            window.location.hash = `#/tdx/${transactionDetails.txid}`;
+          };
 
           let icon;
           if (transactionDetails.type === "out") {
@@ -1489,27 +1475,96 @@
             html`
               <div class="tx-details-container">
                 <div class="tx-header">
-                  <h3 class="tx-title">Transaction Details</h3>
-                  ${currentCurrency !== "bsc" && isHistoricApiAvailable
-                    ? html`
-                        <div class="margin-left-auto">
-                          <sm-switch
-                            id="inline_tx_valuation_toggle"
-                            ?checked=${showCurrentValue}
-                          >
-                            <p slot="left" class="margin-right-0-5">
-                              Show current value
-                            </p>
-                          </sm-switch>
-                        </div>
-                      `
-                    : ""}
+                  <h2 class="tx-title">Transaction Details</h2>
                 </div>
 
-                <div id="inline_tx_details_container" class="tx-content">
-                  <div class="loading-state">
-                    <sm-spinner size="lg"></sm-spinner>
-                    <p class="loading-text">Fetching transaction details...</p>
+                <div id="tx_details_container" class="tx-content">
+                  <div class="tx-card">
+                    <!-- Status Header -->
+                    <div class="tx-status-header">
+                      <div
+                        id="tx_status_indicator"
+                        class="status-indicator"
+                      ></div>
+                      <div class="status-details">
+                        <h3 id="tx_status_title" class="status-title"></h3>
+                        <p id="tx_status_subtext" class="status-subtext"></p>
+                      </div>
+                    </div>
+
+                    <!-- Main Transaction Info -->
+                    <div class="tx-info-grid">
+                      <!-- From/To Section -->
+                      <div class="tx-address-section">
+                        <div class="address-card">
+                          <label class="address-label">From</label>
+                          <sm-copy
+                            id="tx_from"
+                            class="address-value"
+                            button-class="copy-button"
+                          ></sm-copy>
+                        </div>
+
+                        <div class="tx-arrow">→</div>
+
+                        <div class="address-card">
+                          <label class="address-label">To</label>
+                          <sm-copy
+                            id="tx_to"
+                            class="address-value"
+                            button-class="copy-button"
+                          ></sm-copy>
+                        </div>
+                      </div>
+
+                      <!-- Transaction Hash -->
+                      <div class="tx-hash-section">
+                        <label class="section-label">Transaction Hash</label>
+                        <sm-copy
+                          id="tx_hash"
+                          class="hash-value"
+                          button-class="copy-button"
+                        ></sm-copy>
+                      </div>
+
+                      <!-- Metrics Grid -->
+                      <div class="tx-metrics-grid">
+                        <div class="metric-card">
+                          <label class="metric-label">Amount</label>
+                          <div id="tx_value" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Transaction Fee</label>
+                          <div id="tx_fee" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Status</label>
+                          <div id="tx_status" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Timestamp</label>
+                          <div id="tx_timestamp" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Block</label>
+                          <div id="tx_block" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Gas Price</label>
+                          <div id="tx_gasPrice" class="metric-value"></div>
+                        </div>
+
+                        <div class="metric-card">
+                          <label class="metric-label">Gas Used</label>
+                          <div id="tx_gasUsed" class="metric-value"></div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1522,7 +1577,7 @@
 
             if (!tx) {
               renderElem(
-                getRef("inline_tx_details_container"),
+                getRef("tx_details_container"),
                 html`
                   <div class="error-state">
                     <div class="error-icon">!</div>
@@ -1543,180 +1598,11 @@
               return;
             }
 
-            const value = tx.value
-              ? ethers.utils.formatEther(ethers.BigNumber.from(tx.value._hex))
-              : "0";
-            const gasPrice = tx.gasPrice
-              ? ethers.utils.formatUnits(
-                  ethers.BigNumber.from(tx.gasPrice._hex),
-                  "gwei"
-                )
-              : "N/A";
-            const gasUsed = tx.gasUsed
-              ? ethers.utils.formatUnits(ethers.BigNumber.from(tx.gasUsed._hex))
-              : "Pending";
-            const timestamp = tx.timeStamp
-              ? getFormattedTime(tx.timeStamp)
-              : "Pending";
-            const status = tx.blockNumber ? "confirmed" : "pending";
-
-            const fee =
-              tx.gasUsed && tx.gasPrice
-                ? ethers.utils.formatEther(
-                    ethers.BigNumber.from(tx.gasUsed._hex).mul(
-                      ethers.BigNumber.from(tx.gasPrice._hex)
-                    )
-                  )
-                : "Pending";
-
-            renderElem(
-              getRef("inline_tx_details_container"),
-              html`
-                <div class="tx-card" id="inline-tx-status">
-                  <!-- Status Header -->
-                  <div class="tx-status-header">
-                    <div
-                      id="inline_tx_status_indicator"
-                      class="status-indicator"
-                      style="background-color: ${status === "confirmed"
-                        ? "var(--color-success)"
-                        : "var(--color-warning)"};
-                box-shadow: 0 0 0 4px rgba(${status === "confirmed"
-                        ? "var(--color-success-rgb)"
-                        : "var(--color-warning-rgb)"}, 0.2);"
-                    ></div>
-                    <div class="status-details">
-                      <h3 class="status-title">
-                        ${status === "confirmed"
-                          ? "Transaction Confirmed"
-                          : "Transaction Pending"}
-                      </h3>
-                      <p class="status-subtext">
-                        ${status === "confirmed"
-                          ? `Included in Block #${tx.blockNumber}`
-                          : ""}
-                      </p>
-                    </div>
-                    <button
-                      class="button close-details"
-                      style="margin-left: auto;"
-                      onclick="getRef('tx_details').classList.add('hidden')"
-                    >
-                      <svg
-                        class="icon"
-                        xmlns="http://www.w3.org/2000/svg"
-                        height="24px"
-                        viewBox="0 0 24 24"
-                        width="24px"
-                        fill="#000000"
-                      >
-                        <path d="M0 0h24v24H0V0z" fill="none" />
-                        <path
-                          d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-
-                  <!-- Main Transaction Info -->
-                  <div class="tx-info-grid">
-                    <!-- From/To Section -->
-                    <div class="tx-address-section">
-                      <div class="address-card">
-                        <label class="address-label">From</label>
-                        <sm-copy
-                          class="address-value interactive"
-                          value="${tx.from}"
-                          onclick="window.location.hash = '#/balance/${tx.from}'"
-                        ></sm-copy>
-                      </div>
-
-                      <div class="tx-arrow">→</div>
-
-                      <div class="address-card">
-                        <label class="address-label">To</label>
-                        <sm-copy
-                          class="address-value interactive"
-                          value="${tx.to || "Contract Creation"}"
-                          ${tx.to
-                            ? `onclick="window.location.hash = '#/balance/${tx.to}'"`
-                            : ""}
-                        ></sm-copy>
-                      </div>
-                    </div>
-
-                    <!-- Transaction Hash -->
-                    <div class="tx-hash-section">
-                      <label class="section-label">Transaction Hash</label>
-                      <sm-copy class="hash-value" value="${tx.hash}"></sm-copy>
-                    </div>
-
-                    <!-- Metrics Grid -->
-                    <div class="tx-metrics-grid">
-                      <div class="metric-card">
-                        <label class="metric-label">Value</label>
-                        <div
-                          class="metric-value bsc-value"
-                          data-bsc="${value}"
-                          data-timestamp="${tx.timeStamp || ""}"
-                        >
-                          ${formatCurrency(value)}
-                        </div>
-                      </div>
-
-                      <div class="metric-card">
-                        <label class="metric-label">Gas Price</label>
-                        <div class="metric-value">${gasPrice} Gwei</div>
-                      </div>
-
-                      <div class="metric-card">
-                        <label class="metric-label">Transaction Fee</label>
-                        <div
-                          class="metric-value bsc-value"
-                          data-bsc="${fee}"
-                          data-timestamp="${tx.timeStamp || ""}"
-                        >
-                          ${formatCurrency(fee)}
-                        </div>
-                      </div>
-
-                      <div class="metric-card">
-                        <label class="metric-label">Timestamp</label>
-                        <div class="metric-value">${timestamp}</div>
-                      </div>
-                    </div>
-
-                    <div class="actions">
-                      <a
-                        class="button button--primary"
-                        target="_blank"
-                        href="https://bscscan.com/tx/${tx.hash}"
-                      >
-                        View on BSCScan
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              `
-            );
-
-            if (getRef("inline_tx_valuation_toggle")) {
-              getRef("inline_tx_valuation_toggle").addEventListener(
-                "change",
-                async (e) => {
-                  showCurrentValue = e.target.checked;
-                  localStorage.setItem(
-                    "bsc-wallet-show-current-value",
-                    showCurrentValue
-                  );
-                  await convertAllDisplayedCurrency();
-                }
-              );
-            }
+            updateTransactionDetails(tx);
           } catch (error) {
             console.error("Error fetching transaction details:", error);
             renderElem(
-              getRef("inline_tx_details_container"),
+              getRef("tx_details_container"),
               html`
                 <div class="error-state">
                   <div class="error-icon">⚠️</div>
@@ -1781,14 +1667,18 @@
               <h4>Searched addresses</h4>
               <ul id="searched_addresses_list" class="grid gap-0-5"></ul>
             </aside>
-            <section id="balance_section" class="grid gap-1-5">
-              <h2>Check Binance, USDC and USDT balance</h2>
+            <section
+              id="balance_section"
+              class="grid gap-1-5"
+              style="width: min(32rem, 100%);"
+            >
+              <h2>Check BNB, USDC and USDT balance</h2>
               <sm-form oninvalid="handleInvalidSearch()">
                 <div id="input_wrapper">
                   <sm-input
                     id="check_balance_input"
                     class="password-field flex-1"
-                    placeholder="FLO/BTC private key or BSC address"
+                    placeholder="Enter BSC address, transaction hash, or private key"
                     type="password"
                     animate
                     required
@@ -1803,7 +1693,7 @@
                       width="24px"
                       fill="#000000"
                     >
-                      <g><rect fill="none" height="24" width="24"></rect></g>
+                      <g><rect fill="none" height="24" width="24" /></g>
                       <g>
                         <path
                           d="M21,10h-8.35C11.83,7.67,9.61,6,7,6c-3.31,0-6,2.69-6,6s2.69,6,6,6c2.61,0,4.83-1.67,5.65-4H13l2,2l2-2l2,2l4-4.04L21,10z M7,15c-1.65,0-3-1.35-3-3c0-1.65,1.35-3,3-3s3,1.35,3,3C10,13.65,8.65,15,7,15z"
@@ -1830,10 +1720,10 @@
                         <path
                           d="M0 0h24v24H0zm0 0h24v24H0zm0 0h24v24H0zm0 0h24v24H0z"
                           fill="none"
-                        ></path>
+                        />
                         <path
                           d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"
-                        ></path>
+                        />
                       </svg>
                       <svg
                         class="icon visible"
@@ -1844,10 +1734,10 @@
                         fill="#000000"
                       >
                         <title>Show password</title>
-                        <path d="M0 0h24v24H0z" fill="none"></path>
+                        <path d="M0 0h24v24H0z" fill="none" />
                         <path
                           d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
-                        ></path>
+                        />
                       </svg>
                     </label>
                   </sm-input>
@@ -1859,12 +1749,40 @@
                       onclick=${() => checkBalance()}
                       disabled
                     >
-                      Check balance
+                      Search
                     </button>
                   </div>
                 </div>
               </sm-form>
-              <div id="bsc_balance_wrapper" class="grid gap-2 hidden"></div>
+
+              <div id="bsc_balance_wrapper" class="grid gap-2 hidden">
+                <div class="balance-card">
+                  <div class="grid">
+                    <div class="label">BSC address</div>
+                    <sm-copy id="BSC_address"></sm-copy>
+                  </div>
+                  <div class="grid gap-1">
+                    <h4>Balance</h4>
+                    <ul
+                      id="token_balances"
+                      class="flex flex-direction-column gap-0-5"
+                    >
+                      <li class="flex align-center space-between">
+                        <p>BNB</p>
+                        <b id="Binance_balance" class="bsc-value"></b>
+                      </li>
+                      <li class="flex align-center space-between">
+                        <p>USDC</p>
+                        <b id="usdc_balance" class="bsc-value"></b>
+                      </li>
+                      <li class="flex align-center space-between">
+                        <p>USDT</p>
+                        <b id="usdt_balance" class="bsc-value"></b>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
 
               <div
                 id="address_transactions"
@@ -1889,22 +1807,6 @@
                       <sm-chip value="received">Received</sm-chip>
                     </sm-chips>
                   </div>
-                  ${currentCurrency !== "bsc"
-                    ? html`
-                        <div class="margin-left-auto">
-                          <sm-switch
-                            id="valuation_toggle"
-                            ?checked=${showCurrentValue}
-                            onchange=${(e) =>
-                              handleValuationTypeChange(e.target.checked)}
-                          >
-                            <p slot="left" class="margin-right-0-5">
-                              Show current value
-                            </p>
-                          </sm-switch>
-                        </div>
-                      `
-                    : ""}
                 </div>
                 <ul
                   id="transactions_list"
@@ -1934,8 +1836,8 @@
                   </p>
                 </div>
               </div>
-              <div id="tx_details" class="hidden"></div>
             </section>
+            <div id="tx_details" class="hidden"></div>
           `
         );
         if (
@@ -2141,9 +2043,10 @@
             <section class="tx-details-container">
               <div class="tx-header">
                 <h2 class="tx-title">Transaction Details</h2>
+
                 ${currentCurrency !== "bsc" && isHistoricApiAvailable
                   ? html`
-                      <div class="margin-left-auto">
+                      <div class="margin-left-1">
                         <sm-switch
                           id="tx_valuation_toggle"
                           ?checked=${showCurrentValue}
@@ -2170,11 +2073,14 @@
         // Fetch and display transaction details
         bscOperator
           .getTransactionDetails(txId)
-          .then((tx) => {
+          .then(async (tx) => {
             if (!tx) {
               renderNotFound();
               return;
             }
+
+            // Store the address for back navigation
+            window.lastViewedAddress = tx.from;
 
             const value = tx.value
               ? ethers.utils.formatEther(ethers.BigNumber.from(tx.value._hex))
@@ -2247,8 +2153,8 @@
                         <label class="metric-label">Value</label>
                         <div
                           id="tx_value"
-                          class="metric-value bsc-value"
-                          data-bsc="${value}"
+                          class="metric-value eth-value"
+                          data-eth="${value}"
                           data-timestamp="${tx.timeStamp || ""}"
                         ></div>
                       </div>
@@ -2262,8 +2168,8 @@
                         <label class="metric-label">Transaction Fee</label>
                         <div
                           id="tx_fee"
-                          class="metric-value bsc-value"
-                          data-bsc="${fee}"
+                          class="metric-value eth-value"
+                          data-eth="${fee}"
                           data-timestamp="${tx.timeStamp || ""}"
                         ></div>
                       </div>
@@ -2278,7 +2184,6 @@
               `
             );
 
-            // Update transaction status UI
             if (getRef("tx_status_indicator")) {
               const statusIndicator = getRef("tx_status_indicator");
               if (status === "confirmed") {
@@ -2292,7 +2197,6 @@
               }
             }
 
-            // Set transaction status text
             if (getRef("tx_status_title")) {
               getRef("tx_status_title").textContent =
                 status === "confirmed"
@@ -2307,16 +2211,15 @@
                   : "";
             }
 
-            // Set transaction details
             if (getRef("tx_status")) getRef("tx_status").value = status;
             if (getRef("tx-status")) getRef("tx-status").value = tx.status;
-
-            // Setup transaction address fields with click behavior
             if (getRef("tx_from")) {
               getRef("tx_from").value = tx.from;
               getRef("tx_from").addEventListener("click", function (e) {
                 if (!e.target.closest("sm-copy button")) {
-                  window.location.hash = `#/balance/${tx.from}`;
+                  const address = getRef("tx_from").value;
+                  window.location.hash = `#/balance/${address}`;
+                  checkBalance(address);
                 }
               });
               getRef("tx_from").style.cursor = "pointer";
@@ -2328,7 +2231,9 @@
               if (tx.to) {
                 getRef("tx_to").addEventListener("click", function (e) {
                   if (!e.target.closest("sm-copy button")) {
-                    window.location.hash = `#/balance/${tx.to}`;
+                    const address = getRef("tx_to").value;
+                    window.location.hash = `#/balance/${address}`;
+                    checkBalance(address);
                   }
                 });
                 getRef("tx_to").style.cursor = "pointer";
@@ -2336,69 +2241,66 @@
               }
             }
 
-            // Set transaction hash
             if (getRef("tx_hash")) getRef("tx_hash").value = tx.hash;
 
-            // Set transaction value
             if (getRef("tx_value")) {
-              getRef("tx_value").dataset.bsc = value;
+              getRef("tx_value").dataset.eth = value;
               getRef("tx_value").dataset.timestamp = tx.timeStamp || "";
-              getRef("tx_value").classList.add("bsc-value");
+              getRef("tx_value").classList.add("eth-value");
               getRef("tx_value").textContent = formatCurrency(value);
             }
 
-            // Set gas price and fee
             if (getRef("tx_gasPrice"))
               getRef("tx_gasPrice").textContent = `${gasPrice} Gwei`;
             if (getRef("tx_fee")) {
-              getRef("tx_fee").dataset.bsc = fee;
+              getRef("tx_fee").dataset.eth = fee;
               getRef("tx_fee").dataset.timestamp = tx.timeStamp || "";
-              getRef("tx_fee").classList.add("bsc-value");
+              getRef("tx_fee").classList.add("eth-value");
               getRef("tx_fee").textContent = formatCurrency(fee);
             }
-
-            // Set timestamp
             if (getRef("tx_timestamp"))
               getRef("tx_timestamp").textContent = timestamp;
 
-            // Configure valuation toggle
             if (getRef("tx_valuation_toggle")) {
+              // Clear any previous event listeners by replacing with a fresh element
               const toggle = getRef("tx_valuation_toggle");
               const toggleParent = toggle.parentElement;
               const newToggle = toggle.cloneNode(true);
 
+              // Add our event listener to the new element before inserting it
               newToggle.addEventListener("change", async (e) => {
                 showCurrentValue = e.target.checked;
                 localStorage.setItem(
-                  "bsc-wallet-show-current-value",
+                  "eth-wallet-show-current-value",
                   showCurrentValue
                 );
 
+                // Get elements directly to ensure we update them
                 const valueElement = getRef("tx_value");
                 const feeElement = getRef("tx_fee");
 
-                if (valueElement && valueElement.dataset.bsc) {
-                  const bscAmount = parseFloat(valueElement.dataset.bsc);
+                if (valueElement && valueElement.dataset.eth) {
+                  const ethAmount = parseFloat(valueElement.dataset.eth);
                   const timestamp = valueElement.dataset.timestamp;
                   valueElement.textContent = await getConvertedAmount(
-                    bscAmount,
+                    ethAmount,
                     timestamp
                   );
                 }
 
-                if (feeElement && feeElement.dataset.bsc) {
-                  const bscFee = parseFloat(feeElement.dataset.bsc);
+                if (feeElement && feeElement.dataset.eth) {
+                  const ethFee = parseFloat(feeElement.dataset.eth);
                   const timestamp = feeElement.dataset.timestamp;
                   feeElement.textContent = await getConvertedAmount(
-                    bscFee,
+                    ethFee,
                     timestamp
                   );
                 }
               });
 
+              // Replace the original toggle with our new one
               toggleParent.replaceChild(newToggle, toggle);
             }
-
             convertAllDisplayedCurrency();
             if (currentCurrency !== "bsc" && !isHistoricApiAvailable) {
               testHistoricalAPIAndRenderToggle();
@@ -2516,22 +2418,25 @@
       }
 
       function checkBalance(BSCAddress, floAddress) {
-        console.log("[DEBUG] checkBalance called with:", {
-          BSCAddress,
-          floAddress,
-        });
+        // If BSCAddress is provided, set it in the search input
+        if (BSCAddress && getRef("check_balance_input")) {
+          getRef("check_balance_input").value = BSCAddress;
+        }
+
         if (!BSCAddress) {
           let keyToConvert = document
             .querySelector("#check_balance_input")
             .value.trim();
-          console.log("[DEBUG] keyToConvert:", keyToConvert);
-          if (bscOperator.isValidAddress(keyToConvert)) {
+          
+          if (/^0x[0-9a-fA-F]{64}$/.test(keyToConvert)) {
+            window.location.hash = `#/tdx/${keyToConvert}`;
+            return;
+          } else if (bscOperator.isValidAddress(keyToConvert)) {
             BSCAddress = keyToConvert;
           } else {
             if (/^[0-9a-fA-F]{64}$/.test(keyToConvert)) {
               keyToConvert = coinjs.privkey2wif(keyToConvert);
             }
-            console.log("[DEBUG] Converting to ethPrivateKey:", keyToConvert);
             const ethPrivateKey = coinjs.wif2privkey(keyToConvert).privkey;
             BSCAddress = floEthereum.ethAddressFromPrivateKey(ethPrivateKey);
             floAddress = keyToConvert.startsWith("R")
@@ -2539,13 +2444,15 @@
               : btcOperator.bech32Address(keyToConvert);
           }
         }
+
         if (!BSCAddress) return;
-        console.log(
-          "[DEBUG] Final BSCAddress:",
-          BSCAddress,
-          "floAddress:",
-          floAddress
-        );
+
+        // Store the address for navigation context
+        window.lastViewedAddress = BSCAddress;
+
+        // Update URL without triggering a page reload
+        window.location.hash = `#/balance/${BSCAddress}`;
+
         buttonLoader("check_balance_button", true);
         Promise.all([
           bscOperator.getBalance(BSCAddress),
@@ -2553,11 +2460,6 @@
           bscOperator.getTokenBalance(BSCAddress, "usdt"),
         ])
           .then(([BinanceBalance, usdcBalance, usdtBalance]) => {
-            console.log("[DEBUG] Balances:", {
-              BinanceBalance,
-              usdcBalance,
-              usdtBalance,
-            });
             compactIDB
               .readData("contacts", floAddress || BSCAddress)
               .then((result) => {
@@ -2600,7 +2502,7 @@
                 <div class="grid gap-1">
                   <h4>Balance</h4>
                   <ul
-                    id="eth_address_balance"
+                    id="bsc_address_balance"
                     class="flex flex-direction-column gap-0-5"
                   >
                     <li class="flex align-center space-between">
@@ -2653,7 +2555,6 @@
               }
             );
             // Show transaction history after balance is shown
-            console.log("[DEBUG] Calling render.transactions for:", BSCAddress);
             render.transactions(BSCAddress);
           })
           .catch((error) => {
@@ -2665,12 +2566,18 @@
       }
 
       function handleInvalidSearch() {
-        if (document.startViewTransition)
+        if (document.startViewTransition) {
           document.startViewTransition(() => {
             getRef("bsc_balance_wrapper").classList.add("hidden");
+            getRef("address_transactions").classList.add("hidden");
+            // Clear the search input
+            getRef("check_balance_input").value = "";
           });
-        else {
+        } else {
           getRef("bsc_balance_wrapper").classList.add("hidden");
+          getRef("address_transactions").classList.add("hidden");
+          // Clear the search input
+          getRef("check_balance_input").value = "";
         }
       }
       async function deleteContact(floAddress) {
@@ -2920,34 +2827,15 @@
       // }
 
       function togglePrivateKeyVisibility(input) {
-        console.log(input);
         const target = input.closest("sm-input");
-        // const checkBalanceButton = document.querySelector("#check_balance_button");
-        console.log(target);
         target.type = target.type === "password" ? "text" : "password";
-        // target.focus();
-
-        // checkBalanceButton.disabled = false;
       }
 
-      // const toggleButton = document.querySelector('#toggleButton');
-      // const privateKeyInput = document.querySelector('#private_key_input');
-
-      // toggleButton.addEventListener('click', () => {
-      //   togglePrivateKeyVisibility(privateKeyInput);
-      // });
       function checkSenderBalance() {
-        console.log("[DEBUG] ===== Starting checkSenderBalance =====");
-        console.log("[DEBUG] Function called with arguments:", arguments);
         let address;
         const privateKey = getRef("private_key_input").value.trim();
-        console.log(
-          "[DEBUG] Private key input:",
-          privateKey ? "Provided" : "Not provided"
-        );
 
         if (!privateKey) {
-          console.error("[DEBUG] No private key provided");
           return notify(`Please enter sender's private key to check balance`);
         }
 
@@ -2956,15 +2844,12 @@
           privateKey.startsWith("L") ||
           privateKey.startsWith("K")
         ) {
-          console.log("[DEBUG] Converting WIF private key to address");
           address = floEthereum.ethAddressFromPrivateKey(
             coinjs.wif2privkey(privateKey).privkey
           );
         } else {
-          console.log("[DEBUG] Using direct private key to get address");
           address = floEthereum.ethAddressFromPrivateKey(privateKey);
         }
-        console.log("[DEBUG] Derived address:", address);
 
         getRef("sender_balance_container").classList.remove("hidden");
         renderElem(
@@ -2973,20 +2858,14 @@
         );
 
         const selectedAsset = getRef("asset_selector").value;
-        console.log("[DEBUG] Selected asset:", selectedAsset);
 
         const promises = [bscOperator.getBalance(address)];
         if (selectedAsset !== "Binance") {
-          console.log("[DEBUG] Adding token balance check for:", selectedAsset);
           promises.push(bscOperator.getTokenBalance(address, selectedAsset));
         }
 
         Promise.all(promises)
           .then(([ethBalance, tokenBalance]) => {
-            console.log("[DEBUG] Balance results:", {
-              ethBalance,
-              tokenBalance,
-            });
             renderElem(
               getRef("sender_balance_container"),
               html`
@@ -3015,12 +2894,10 @@
             );
           })
           .catch((err) => {
-            console.error("[DEBUG] Error checking balance:", err);
             notify(err, "error");
           });
       }
       function handleSenderInput(e) {
-        console.log(e.target.isValid);
         getRef("check_balance_button").disabled = false;
         if (!e.target.isValid) {
           // getRef("sender_balance_container").classList.add("hidden");
@@ -3041,48 +2918,35 @@
         getRef("send_tx_button").textContent = `Send ${asset.toUpperCase()}`;
       }
       async function sendTx() {
-        console.log("[DEBUG] ===== Starting sendTx =====");
-        console.log("[DEBUG] Function called with arguments:", arguments);
         const receiver = getRef("receiver_input").value.trim();
         const amount = getRef("amount_input").value.trim();
         const asset = getRef("asset_selector").value;
-        console.log("[DEBUG] Transaction parameters:", {
-          receiver,
-          amount,
-          asset,
-        });
 
         try {
           const confirmation = await getConfirmation("Send transaction", {
             message: `You are about to send ${amount} ${asset.toUpperCase()} to ${receiver}`,
             confirmText: "Send",
           });
-          console.log("[DEBUG] User confirmation:", confirmation);
 
           if (!confirmation) {
-            console.log("[DEBUG] Transaction cancelled by user");
             return;
           }
 
           buttonLoader("send_tx_button", true);
           let privateKey = getRef("private_key_input").value.trim();
-          console.log("[DEBUG] Processing private key...");
 
           if (/^[0-9a-fA-F]{64}$/.test(privateKey)) {
             privateKey = coinjs.privkey2wif(privateKey);
           }
           privateKey = coinjs.wif2privkey(privateKey).privkey;
 
-          console.log("[DEBUG] Sending transaction for asset:", asset);
           switch (asset) {
             case "Binance": {
-              console.log("[DEBUG] Sending BNB transaction...");
               const tx = await bscOperator.sendTransaction({
                 privateKey,
                 receiver,
                 amount,
               });
-              console.log("[DEBUG] BNB transaction sent, hash:", tx.hash);
               showTransactionResult("pending", { txHash: tx.hash });
               await tx.wait();
               showTransactionResult("confirmed", { txHash: tx.hash });
@@ -3090,24 +2954,20 @@
             }
             case "usdc":
             case "usdt": {
-              console.log("[DEBUG] Sending token transaction:", asset);
               const tx = await bscOperator.sendToken({
                 privateKey,
                 receiver,
                 amount,
                 token: asset,
               });
-              console.log("[DEBUG] Token transaction sent, hash:", tx.hash);
               showTransactionResult("pending", { txHash: tx.hash });
               await tx.wait();
               showTransactionResult("confirmed", { txHash: tx.hash });
               break;
             }
           }
-          console.log("[DEBUG] Transaction completed successfully");
           getRef("send_tx_form").reset();
         } catch (e) {
-          console.error("[DEBUG] Transaction error:", e);
           showTransactionResult("failed", {
             description: `Insufficient ${asset.toUpperCase()} balance`,
           });
@@ -3116,12 +2976,10 @@
           if (match && match[1]) {
             const { code } = JSON.parse(match[1]);
             if (code === -32000) {
-              console.error("[DEBUG] Insufficient balance error");
               showTransactionResult("failed", {
                 description: `Insufficient ${asset.toUpperCase()} balance`,
               });
             } else {
-              console.error("[DEBUG] Other transaction error:", e.message);
               showTransactionResult("failed", { description: e.message });
             }
           }
@@ -3131,15 +2989,8 @@
       }
 
       function showTransactionResult(status, { txHash, description = "" }) {
-        console.log("[DEBUG] ===== Starting showTransactionResult =====");
-        console.log("[DEBUG] Function called with:", {
-          status,
-          txHash,
-          description,
-        });
         switch (status) {
           case "pending":
-            console.log("[DEBUG] Rendering pending transaction UI");
             renderElem(
               getRef("transaction_result_popup__content"),
               html`
@@ -3179,7 +3030,6 @@
             );
             break;
           case "confirmed":
-            console.log("[DEBUG] Rendering confirmed transaction UI");
             renderElem(
               getRef("transaction_result_popup__content"),
               html`
@@ -3214,7 +3064,6 @@
             );
             break;
           case "failed":
-            console.log("[DEBUG] Rendering failed transaction UI");
             renderElem(
               getRef("transaction_result_popup__content"),
               html`
@@ -3362,6 +3211,56 @@
             retrieve();
           });
         } else retrieve();
+      }
+
+      function testHistoricalAPIAndRenderToggle() {
+        // Get date from a week ago for testing historical data
+        const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+
+        fetchHistoricalRate(oneWeekAgo)
+          .then((rates) => {
+            if (rates && (rates.usd > 0 || rates.inr > 0)) {
+              isHistoricApiAvailable = true;
+              renderValuationToggle();
+            } else {
+              isHistoricApiAvailable = false;
+            }
+          })
+          .catch(() => {
+            isHistoricApiAvailable = false;
+          });
+      }
+
+      function renderValuationToggle() {
+        if (isHistoricApiAvailable && currentCurrency !== "bsc") {
+          const container = document.querySelector(
+            ".flex.flex-direction-column.gap-0-5.sticky.top-0"
+          );
+          if (container) {
+            const existingToggle = container.querySelector("sm-switch");
+            if (!existingToggle) {
+              const toggleDiv = document.createElement("div");
+              toggleDiv.className = "margin-left-auto";
+              toggleDiv.innerHTML = `
+                <sm-switch id="valuation_toggle" ${
+                  showCurrentValue ? "checked" : ""
+                }>
+                  <p slot="left" class="margin-right-0-5">
+                    Show current value
+                  </p>
+                </sm-switch>
+              `;
+              container.appendChild(toggleDiv);
+
+              // Add event handler to the new toggle
+              document
+                .getElementById("valuation_toggle")
+                .addEventListener("change", (e) => {
+                  handleValuationTypeChange(e.target.checked);
+                });
+            }
+          }
+        }
       }
     </script>
   </body>

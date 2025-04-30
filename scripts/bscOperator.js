@@ -350,7 +350,7 @@
         console.error("[DEBUG] Invalid address:", address);
         return new Error("Invalid address");
       }
-      // Get the balance
+  
       const provider = getProvider();
       console.log("[DEBUG] Provider obtained, fetching balance...");
       const balanceWei = await provider.getBalance(address);
